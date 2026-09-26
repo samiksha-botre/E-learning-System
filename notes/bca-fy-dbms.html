@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Notes - DBMS</title>
+
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+
+<body class="notes-page">
+
+    <div class="notes-box">
+
+        <h1>DBMS - MY NOTES</h1>
+
+        <textarea placeholder="Write your notes here..."></textarea>
+
+        <br>
+
+        <button onclick="saveNotes()">SAVE NOTES</button>
+
+        <a href="../subject.html">BACK TO SUBJECT</a>
+
+    </div>
+
+    <script>
+        function saveNotes() {
+            localStorage.setItem(
+                "bca-fy-dbms-notes",
+                document.querySelector("textarea").value
+            );
+
+            alert("Notes saved successfully!");
+        }
+
+        document.querySelector("textarea").value =
+            localStorage.getItem("bca-fy-dbms-notes") || "";
+    </script>
+
+</body>
+
+</html>
