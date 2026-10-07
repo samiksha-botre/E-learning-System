@@ -60,7 +60,7 @@ function showUploadedPDFs($conn, $course, $year)
         <div class="menu">
             <a href="dashboard.html">DASHBOARD</a>
             <a href="subject.php">SUBJECT</a>
-            <a href="feedback.html">FEEDBACK</a>
+            <a href="feedback.php">FEEDBACK</a>
         </div>
     </nav>
 </header>

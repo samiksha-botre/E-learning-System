@@ -224,7 +224,7 @@ $pdfResult = $conn->query(
 
                 <a href="admin.php">ADMIN DASHBOARD</a>
 
-                <a href="feedback.html">FEEDBACK</a>
+                <a href="feedback.php">FEEDBACK</a>
 
             </div>
 
