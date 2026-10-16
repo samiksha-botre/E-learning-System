@@ -1,14 +1,14 @@
+
 <?php
 
 session_start();
 
-/* Check whether logged-in user is admin */
+/* Check admin access */
 
 if (!isset($_SESSION["role"]) || $_SESSION["role"] != "admin") {
     header("Location: login.php");
     exit();
 }
-
 
 /* Database connection */
 
@@ -18,110 +18,19 @@ if ($conn->connect_error) {
     die("Database connection failed: " . $conn->connect_error);
 }
 
-
 $message = "";
 
+/* Upload success message */
 
-/* ================= ADD PDF ================= */
-
-if (isset($_POST["add_pdf"])) {
-
-    $course = $_POST["course"];
-    $year = $_POST["year"];
-    $subject = trim($_POST["subject"]);
-
-
-    if ($course == "" || $year == "" || $subject == "") {
-
-        $message = "Please fill all fields.";
-
-    } elseif (!isset($_FILES["pdf"]) || $_FILES["pdf"]["error"] != 0) {
-
-        $message = "Please select a PDF.";
-
-    } else {
-
-        $fileName = $_FILES["pdf"]["name"];
-        $tmpName = $_FILES["pdf"]["tmp_name"];
-
-        $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-
-
-        /* Allow only PDF */
-
-        if ($fileExtension != "pdf") {
-
-            $message = "Only PDF files are allowed.";
-
-        } else {
-
-            /* Create unique filename */
-
-            $newFileName = time() . "_" . basename($fileName);
-
-
-            /* Select folder */
-
-            if ($course == "BCA") {
-                $uploadFolder = "pdf/bca/";
-            } else {
-                $uploadFolder = "pdf/bcs/";
-            }
-
-
-            /* Move PDF */
-
-            if (move_uploaded_file($tmpName, $uploadFolder . $newFileName)) {
-
-                /* Store PDF information in database */
-
-                $stmt = $conn->prepare(
-                    "INSERT INTO pdfs (course, year, subject, filename)
-                     VALUES (?, ?, ?, ?)"
-                );
-
-                $stmt->bind_param(
-                    "ssss",
-                    $course,
-                    $year,
-                    $subject,
-                    $newFileName
-                );
-
-                if ($stmt->execute()) {
-
-                    $message = "PDF added successfully!";
-
-                } else {
-
-                    /* If database insertion fails, remove uploaded file */
-
-                    unlink($uploadFolder . $newFileName);
-
-                    $message = "Database error.";
-
-                }
-
-                $stmt->close();
-
-            } else {
-
-                $message = "PDF upload failed.";
-
-            }
-        }
-    }
+if (isset($_GET["upload"]) && $_GET["upload"] == "success") {
+    $message = "PDF added successfully!";
 }
-
 
 /* ================= DELETE PDF ================= */
 
 if (isset($_POST["delete_pdf"])) {
 
     $pdf_id = intval($_POST["pdf_id"]);
-
-
-    /* Get PDF information */
 
     $stmt = $conn->prepare(
         "SELECT course, filename FROM pdfs WHERE id = ?"
@@ -132,7 +41,6 @@ if (isset($_POST["delete_pdf"])) {
 
     $result = $stmt->get_result();
 
-
     if ($result->num_rows == 1) {
 
         $pdf = $result->fetch_assoc();
@@ -140,24 +48,9 @@ if (isset($_POST["delete_pdf"])) {
         $course = $pdf["course"];
         $filename = $pdf["filename"];
 
-
-        /* Select folder */
-
-        if ($course == "BCA") {
-            $filePath = "pdf/bca/" . $filename;
-        } else {
-            $filePath = "pdf/bcs/" . $filename;
-        }
-
-
-        /* Delete physical PDF file */
-
-        if (file_exists($filePath)) {
-            unlink($filePath);
-        }
-
-
-        /* Delete database record */
+        $filePath = ($course == "BCA")
+            ? "pdf/bca/" . $filename
+            : "pdf/bcs/" . $filename;
 
         $deleteStmt = $conn->prepare(
             "DELETE FROM pdfs WHERE id = ?"
@@ -167,25 +60,24 @@ if (isset($_POST["delete_pdf"])) {
 
         if ($deleteStmt->execute()) {
 
+            if (file_exists($filePath)) {
+                unlink($filePath);
+            }
+
             $message = "PDF deleted successfully!";
 
         } else {
-
             $message = "Unable to delete PDF.";
-
         }
 
         $deleteStmt->close();
 
     } else {
-
         $message = "PDF not found.";
-
     }
 
     $stmt->close();
 }
-
 
 /* ================= GET ALL PDFs ================= */
 
@@ -195,16 +87,85 @@ $pdfResult = $conn->query(
      ORDER BY id DESC"
 );
 
+if (!$pdfResult) {
+    die("Unable to load PDFs.");
+}
+
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Admin Dashboard - E-Learning System</title>
 
     <link rel="stylesheet" href="css/style.css">
+
+    <style>
+        .pdf-search-form {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .pdf-search-form select,
+        .pdf-search-form input {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .pdf-search-form input {
+            flex: 1;
+            min-width: 180px;
+        }
+
+        .pdf-search-form button,
+        .pdf-search-form .reset-search {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .pdf-search-form .reset-search {
+            background: #eee;
+            color: #222;
+        }
+
+        .pdf-search-form button {
+            cursor: pointer;
+        }
+
+        .no-search-results {
+            display: none;
+            margin: 15px 0;
+        }
+
+        @media (max-width: 600px) {
+            .pdf-search-form {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .pdf-search-form select,
+            .pdf-search-form input,
+            .pdf-search-form button,
+            .pdf-search-form .reset-search {
+                width: 100%;
+                box-sizing: border-box;
+            }
+        }
+    </style>
 
 </head>
 
@@ -213,7 +174,6 @@ $pdfResult = $conn->query(
     <!-- Header -->
 
     <header>
-
         <nav>
 
             <div class="logout">
@@ -221,19 +181,15 @@ $pdfResult = $conn->query(
             </div>
 
             <div class="menu">
-
                 <a href="admin.php">ADMIN DASHBOARD</a>
-
+                <a href="add_pdf.php">ADD PDF</a>
                 <a href="feedback.php">FEEDBACK</a>
-
             </div>
 
         </nav>
-
     </header>
 
-
-    <!-- Admin Container -->
+    <!-- Admin Dashboard -->
 
     <div class="admin-container">
 
@@ -243,164 +199,127 @@ $pdfResult = $conn->query(
             Welcome Admin! Manage the learning resources from here.
         </p>
 
-
         <?php if ($message != "") { ?>
-
             <p class="admin-message">
                 <?php echo htmlspecialchars($message); ?>
             </p>
-
         <?php } ?>
 
-
-        <!-- ================= ADD PDF ================= -->
-
-        <div class="admin-box">
-
-            <h2>ADD PDF</h2>
-
-            <form method="POST" enctype="multipart/form-data">
-
-                <label for="course">Course</label>
-
-                <select id="course" name="course" required>
-
-                    <option value="">Select Course</option>
-
-                    <option value="BCA">BCA</option>
-
-                    <option value="BCS">BCS</option>
-
-                </select>
-
-
-                <label for="year">Year</label>
-
-                <select id="year" name="year" required>
-
-                    <option value="">Select Year</option>
-
-                    <option value="FY">First Year</option>
-
-                    <option value="SY">Second Year</option>
-
-                    <option value="TY">Third Year</option>
-
-                </select>
-
-
-                <label for="subject">Subject Name</label>
-
-                <input
-                    type="text"
-                    id="subject"
-                    name="subject"
-                    placeholder="Enter subject name"
-                    required
-                >
-
-
-                <label for="pdf">Select PDF</label>
-
-                <input
-                    type="file"
-                    id="pdf"
-                    name="pdf"
-                    accept=".pdf"
-                    required
-                >
-
-
-                <button type="submit" name="add_pdf">
-                    ADD PDF
-                </button>
-
-            </form>
-
-        </div>
-
-
-        <!-- ================= MANAGE PDFs ================= -->
+        <!-- Manage PDFs -->
 
         <div class="admin-box">
 
             <h2>MANAGE PDFs</h2>
 
+            <!-- Course Filter and Subject Search -->
+
+            <div class="pdf-search-form">
+
+                <select id="courseFilter">
+                    <option value="">All Courses</option>
+                    <option value="BCA">BCA</option>
+                    <option value="BCS">BCS</option>
+                </select>
+
+                <input
+                    type="text"
+                    id="subjectSearch"
+                    placeholder="Search subject name..."
+                    autocomplete="off"
+                >
+
+                <button type="button" id="resetSearch">
+                    RESET
+                </button>
+
+            </div>
+
             <?php if ($pdfResult->num_rows > 0) { ?>
 
                 <table class="admin-pdf-table">
 
-                    <tr>
-                        <th>COURSE</th>
-                        <th>YEAR</th>
-                        <th>SUBJECT</th>
-                        <th>PDF</th>
-                        <th>ACTION</th>
-                    </tr>
-
-
-                    <?php while ($pdf = $pdfResult->fetch_assoc()) { ?>
-
+                    <thead>
                         <tr>
-
-                            <td>
-                                <?php echo htmlspecialchars($pdf["course"]); ?>
-                            </td>
-
-                            <td>
-                                <?php echo htmlspecialchars($pdf["year"]); ?>
-                            </td>
-
-                            <td>
-                                <?php echo htmlspecialchars($pdf["subject"]); ?>
-                            </td>
-
-                            <td>
-
-                                <?php
-                                if ($pdf["course"] == "BCA") {
-                                    $folder = "bca";
-                                } else {
-                                    $folder = "bcs";
-                                }
-                                ?>
-
-                                <a
-                                    href="pdf/<?php echo $folder; ?>/<?php echo urlencode($pdf["filename"]); ?>"
-                                    target="_blank"
-                                >
-                                    OPEN PDF
-                                </a>
-
-                            </td>
-
-                            <td>
-
-                                <form method="POST" onsubmit="return confirm('Are you sure you want to delete this PDF?');">
-
-                                    <input
-                                        type="hidden"
-                                        name="pdf_id"
-                                        value="<?php echo $pdf["id"]; ?>"
-                                    >
-
-                                    <button
-                                        type="submit"
-                                        name="delete_pdf"
-                                        class="delete-button"
-                                    >
-                                        DELETE
-                                    </button>
-
-                                </form>
-
-                            </td>
-
+                            <th>COURSE</th>
+                            <th>YEAR</th>
+                            <th>SUBJECT</th>
+                            <th>PDF</th>
+                            <th>ACTION</th>
                         </tr>
+                    </thead>
 
-                    <?php } ?>
+                    <tbody id="pdfTableBody">
+
+                        <?php while ($pdf = $pdfResult->fetch_assoc()) { ?>
+
+                            <tr>
+
+                                <td>
+                                    <?php echo htmlspecialchars($pdf["course"]); ?>
+                                </td>
+
+                                <td>
+                                    <?php echo htmlspecialchars($pdf["year"]); ?>
+                                </td>
+
+                                <td>
+                                    <?php echo htmlspecialchars($pdf["subject"]); ?>
+                                </td>
+
+                                <td>
+
+                                    <?php
+                                    $folder = ($pdf["course"] == "BCA")
+                                        ? "bca"
+                                        : "bcs";
+                                    ?>
+
+                                    <a
+                                        href="pdf/<?php echo $folder; ?>/<?php echo rawurlencode($pdf["filename"]); ?>"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        OPEN PDF
+                                    </a>
+
+                                </td>
+
+                                <td>
+
+                                    <form
+                                        method="POST"
+                                        onsubmit="return confirm('Are you sure you want to delete this PDF?');"
+                                    >
+
+                                        <input
+                                            type="hidden"
+                                            name="pdf_id"
+                                            value="<?php echo (int) $pdf["id"]; ?>"
+                                        >
+
+                                        <button
+                                            type="submit"
+                                            name="delete_pdf"
+                                            class="delete-button"
+                                        >
+                                            DELETE
+                                        </button>
+
+                                    </form>
+
+                                </td>
+
+                            </tr>
+
+                        <?php } ?>
+
+                    </tbody>
 
                 </table>
+
+                <p id="noSearchResults" class="no-search-results">
+                    No matching PDFs found.
+                </p>
 
             <?php } else { ?>
 
@@ -414,21 +333,77 @@ $pdfResult = $conn->query(
 
     </div>
 
-
     <!-- Footer -->
 
     <footer>
-
         <p>&copy; 2026 E-Learning System. All Rights Reserved.</p>
-
     </footer>
 
-</body>
+    <!-- Search and Filter Logic -->
 
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+
+            const courseFilter = document.getElementById("courseFilter");
+            const subjectSearch = document.getElementById("subjectSearch");
+            const resetSearch = document.getElementById("resetSearch");
+            const tableBody = document.getElementById("pdfTableBody");
+            const noResults = document.getElementById("noSearchResults");
+
+            if (!courseFilter || !subjectSearch || !resetSearch || !tableBody) {
+                return;
+            }
+
+            const rows = Array.from(tableBody.querySelectorAll("tr"));
+
+            function filterPDFs() {
+
+                const selectedCourse = courseFilter.value.trim().toUpperCase();
+                const searchText = subjectSearch.value.trim().toLowerCase();
+
+                let visibleCount = 0;
+
+                rows.forEach(function (row) {
+
+                    const course = row.cells[0].textContent.trim().toUpperCase();
+                    const subject = row.cells[2].textContent.trim().toLowerCase();
+
+                    const courseMatches =
+                        selectedCourse === "" || course === selectedCourse;
+
+                    const subjectMatches =
+                        subject.includes(searchText);
+
+                    const showRow = courseMatches && subjectMatches;
+
+                    row.style.display = showRow ? "" : "none";
+
+                    if (showRow) {
+                        visibleCount++;
+                    }
+                });
+
+                if (noResults) {
+                    noResults.style.display =
+                        visibleCount === 0 ? "block" : "none";
+                }
+            }
+
+            courseFilter.addEventListener("change", filterPDFs);
+            subjectSearch.addEventListener("input", filterPDFs);
+
+            resetSearch.addEventListener("click", function () {
+                courseFilter.value = "";
+                subjectSearch.value = "";
+                filterPDFs();
+            });
+
+        });
+    </script>
+
+</body>
 </html>
 
 <?php
-
 $conn->close();
-
 ?>
